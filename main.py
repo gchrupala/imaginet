@@ -5,7 +5,7 @@ sys.path.append('/home/gchrupala/repos/Passage')
 sys.path.append('/home/gchrupala/repos/neuraltalk')
 from passage.layers import Embedding, SimpleRecurrent, LstmRecurrent, GatedRecurrent #, Dense
 from passage.costs import MeanSquaredError
-from imagine import *
+from imaginet import *
 from passage.preprocessing import Tokenizer, tokenize
 import passage.utils
 import passage.updates
@@ -41,6 +41,8 @@ def main():
                         help='Path to write model to')
     parser.add_argument('--model_type', dest='model_type', default='simple',
                         help='Type of model: (linear, simple, shared_embeddings, shared_all)')
+    parser.add_argument('--character', dest='character', action='store_true', 
+                        help='Character-level model')
     parser.add_argument('--zero_shot', dest='zero_shot', action='store_true',
                         help='Disable visual signal for sentences containing words in zero_shot.pkl')
     parser.add_argument('--tokenizer', dest='tokenizer', default='tok.pkl',
@@ -122,7 +124,8 @@ def train_linear(args):
     data = list(p.iterImageSentencePair(split='train'))
     texts = [ pair['sentence']['raw'] for pair in data ]
     images = [ pair['image']['feat'] for pair in data ]
-    vectorizer = CountVectorizer(min_df=args.word_freq_threshold, analyzer='word', lowercase=True,
+    analyzer = 'char' if args.character else 'word'
+    vectorizer = CountVectorizer(min_df=args.word_freq_threshold, analyzer=analyzer, lowercase=True,
                                  ngram_range=(1,1))
     X = vectorizer.fit_transform(texts)
     scaler = StandardScaler() if args.scaler == 'standard' else NoScaler()
@@ -201,7 +204,8 @@ def train(args):
         numpy.random.shuffle(pairs)
     output_size = len(pairs[0]['image']['feat'])
     embedding_size = args.embedding_size if args.embedding_size is not None else args.hidden_size
-    tokenizer = cPickle.load(open(args.init_tokenizer)) if args.init_tokenizer else Tokenizer(min_df=args.word_freq_threshold)
+    tokenizer = cPickle.load(open(args.init_tokenizer)) \
+                    if args.init_tokenizer else Tokenizer(min_df=args.word_freq_threshold, character=args.character)
     sentences, images = zip(*[ (pair['sentence']['raw'], maybe_zero(pair['sentence']['raw'],pair['image']['feat']))
                                for pair in pairs ])
     scaler = StandardScaler() if args.scaler == 'standard' else NoScaler()
