@@ -265,7 +265,7 @@ def train(args):
         sqrt_size = embedding_size ** 0.5
         if not sqrt_size.is_integer():
             raise ValueError("Sqrt of embedding_size not integral for matrix model")
-        layers = [ MatrixGroup(sqrt_size=round(sqrt_size), n_features=tokenizer.n_features),
+        layers = [ MatrixGroup(sqrt_size=int(sqrt_size), n_features=tokenizer.n_features),
                    Dense(size=output_size, activation=args.out_activation, reshape=False)
                  ]
         valid = (valid_tokens_inp, valid_images)
@@ -373,16 +373,19 @@ def test(args):
         N = 0
         score = 0.0
         imgids = numpy.array([ pair['sentence']['imgid'] for pair in pairs ])
+        sentids = numpy.array([ pair['sentence']['sentid'] for pair in pairs])
         for j,row in enumerate(distances):
             imgid = pairs[j]['sentence']['imgid']
             sentid = pairs[j]['sentence']['sentid']
             best = numpy.argsort(row)
-            rank = numpy.where(imgids[best] == imgid)[0][0] + 1
+            rank = numpy.where((imgids[best] == imgid) * (sentids[best] != sentid))[0][0] + 1
             top4 = [ pairs[b]['sentence']['imgid'] for b 
                          in best[0:5] if sentid != pairs[b]['sentence']['sentid'] ][0:4] # exclude self
+            top4sent = [ pairs[b]['sentence']['sentid'] for b in best[0:5] if sentid != pairs[b]['sentence']['sentid'] ][0:4]
             score = score + sum([i == imgid for i in top4 ])/4.0
             N = N+1
-            itemInfo = {'sentid':sentid, 'imgid': imgid, 'score': top4/4.0, 'rank': rank, 'topn': top4 , 
+            itemInfo = {'sentid':sentid, 'imgid': imgid, 'score': sum([i == imgid for i in top4 ])/4.0, 
+                        'rank': rank, 'topn': top4 , 'topnsentid': top4sent,
                         'input': tokenizer.inverse_transform([inputs[j]])[0]}
             testInfo['items'].append(itemInfo)
         print args.iter_predict, N, score/N
