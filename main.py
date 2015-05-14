@@ -4,7 +4,7 @@ import sys
 sys.path.append('/home/gchrupala/repos/Passage')
 sys.path.append('/home/gchrupala/repos/neuraltalk')
 from passage.layers import Embedding, SimpleRecurrent, LstmRecurrent, GatedRecurrent #, Dense
-from layers import MatrixGroup
+from layers import *
 from passage.costs import MeanSquaredError
 from imaginet import *
 from passage.preprocessing import Tokenizer, tokenize
@@ -261,19 +261,22 @@ def train(args):
     # else:
     # FIXME implement proper pretraining FIXME
     interpolated = True if not args.non_interpolated else False
-    if args.model_type   == 'matrix':
-        sqrt_size = embedding_size ** 0.5
-        if not sqrt_size.is_integer():
-            raise ValueError("Sqrt of embedding_size not integral for matrix model")
-        layers = [ MatrixGroup(sqrt_size=int(sqrt_size), n_features=tokenizer.n_features),
-                   Dense(size=output_size, activation=args.out_activation, reshape=False)
-                 ]
+    if args.model_type in ['add', 'mult', 'matrix']:
+        if args.model_type == 'add':
+            layer0 = Direct(size=embedding_size, n_features=tokenizer.n_features, op=Add)
+        elif args.model_type == 'mult':
+            layer0 = Direct(size=embedding_size, n_features=tokenizer.n_features, op=Mult)
+        elif args.model_type == 'matrix':
+            sqrt_size = embedding_size ** 0.5
+            if not sqrt_size.is_integer():
+                raise ValueError("Sqrt of embedding_size not integral for matrix model")
+            layer0 = Direct(size=embedding_size, n_features=tokenizer.n_features, op=MatrixMult)
+        layers = [ layer0, Dense(size=output_size, activation=args.out_activation, reshape=False) ]
         valid = (valid_tokens_inp, valid_images)
         model = RNN(layers=layers, updater=updater, cost=z_cost, 
                     iterator=SortedPadded(shuffle=False), verbose=1)
         model.fit(tokens_inp, images, n_epochs=args.iterations, batch_size=args.batch_size, len_filter=None,
                   snapshot_freq=args.snapshot_freq, path=model_path, valid=valid)
-        # FIXME need validation
     elif args.model_type   == 'simple':
         layers = [ Embedding(size=embedding_size, n_features=tokenizer.n_features),
                    Recurrent(seq_output=False, size=args.hidden_size, activation=args.activation),
