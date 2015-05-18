@@ -22,6 +22,7 @@ from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.linear_model import Ridge
 from sklearn.preprocessing import StandardScaler
 import json
+import gzip
 
 def main():
     parser = argparse.ArgumentParser(
@@ -38,15 +39,15 @@ def main():
                         help='Extract embeddings from trained model')
     parser.add_argument('--project_words', dest='project_words',
                         action='store_true', help='Project words from vocabulary to visual space')
-    parser.add_argument('--model', dest='model', default='model.dat',
+    parser.add_argument('--model', dest='model', default='model.dat.gz',
                         help='Path to write model to')
     parser.add_argument('--model_type', dest='model_type', default='simple',
                         help='Type of model: (linear, simple, shared_embeddings, shared_all)')
     parser.add_argument('--character', dest='character', action='store_true', 
                         help='Character-level model')
     parser.add_argument('--zero_shot', dest='zero_shot', action='store_true',
-                        help='Disable visual signal for sentences containing words in zero_shot.pkl')
-    parser.add_argument('--tokenizer', dest='tokenizer', default='tok.pkl',
+                        help='Disable visual signal for sentences containing words in zero_shot.pkl.gz')
+    parser.add_argument('--tokenizer', dest='tokenizer', default='tok.pkl.gz',
                         help='Path to write tokenizer to')
     parser.add_argument('--init_model', dest='init_model', default=None,
                         help='Initialize model weights with model from given path')
@@ -138,17 +139,17 @@ def train_linear(args):
     sys.stderr.write("Starting training\n")
     model.fit(X,Y)
     sys.stderr.write("Saving model\n")
-    cPickle.dump(model, open('model.dat','w'))
-    cPickle.dump(vectorizer, open('vec.pkl','w'))
-    cPickle.dump(scaler, open('vec.pkl', 'w'))
+    cPickle.dump(model, gzip.open('model.dat.gz','w'))
+    cPickle.dump(vectorizer, gzip.open('vec.pkl.gz','w'))
+    cPickle.dump(scaler, gzip.open('vec.pkl.gz', 'w'))
 
 def test_linear(args):
     if args.random_seed is not None:
         numpy.random.seed(args.random_seed)
     D = Cdist()
-    model = cPickle.load(open('model.dat'))
-    vectorizer = cPickle.load(open('vec.pkl'))
-    scaler = cPickle.load(open('scaler.pkl'))
+    model = cPickle.load(gzip.open('model.dat.gz'))
+    vectorizer = cPickle.load(gzip.open('vec.pkl.gz'))
+    scaler = cPickle.load(gzip.open('scaler.pkl.gz'))
     real_stdout = sys.stdout
     with open('/dev/null', 'w') as f:
         sys.stdout = f
@@ -189,7 +190,7 @@ def test_linear(args):
         print errors, N, errors/N
 
 def train(args):
-    zero_words = cPickle.load(open("zero_shot.pkl")) if args.zero_shot else set()
+    zero_words = cPickle.load(gzip.open("zero_shot.pkl.gz")) if args.zero_shot else set()
     def maybe_zero(s, i):
         overlap = set(tokenize(s)).intersection(zero_words)    
         if args.zero_shot and len(overlap) > 0:
@@ -205,7 +206,7 @@ def train(args):
         numpy.random.shuffle(pairs)
     output_size = len(pairs[0]['image']['feat'])
     embedding_size = args.embedding_size if args.embedding_size is not None else args.hidden_size
-    tokenizer = cPickle.load(open(args.init_tokenizer)) \
+    tokenizer = cPickle.load(gzip.open(args.init_tokenizer)) \
                     if args.init_tokenizer else Tokenizer(min_df=args.word_freq_threshold, character=args.character)
     sentences, images = zip(*[ (pair['sentence']['raw'], maybe_zero(pair['sentence']['raw'],pair['image']['feat']))
                                for pair in pairs ])
@@ -217,8 +218,8 @@ def train(args):
 
     tokens_out = [ token[1:]  for token in tokens ]
 
-    cPickle.dump(tokenizer, open(tok_path, 'w'))
-    cPickle.dump(scaler, open('scaler.pkl','w'))
+    cPickle.dump(tokenizer, gzip.open(tok_path, 'w'))
+    cPickle.dump(scaler, gzip.open('scaler.pkl.gz','w'))
     # Validation data
     valid_pairs = list(d.iterImageSentencePair(split='val'))
     valid_sents, valid_images  = zip(*[ (pair['sentence']['raw'], pair['image']['feat'])
@@ -288,6 +289,18 @@ def train(args):
         model.fit(tokens_inp, images, n_epochs=args.iterations, batch_size=args.batch_size, len_filter=None,
                   snapshot_freq=args.snapshot_freq, path=model_path, valid=valid)
         # FIXME need validation
+    elif args.model_type   == 'deep-simple':
+        layers = [ Embedding(size=embedding_size, n_features=tokenizer.n_features),
+                   Recurrent(seq_output=True,  size=args.hidden_size, activation=args.activation),
+                   Recurrent(seq_output=False, size=args.hidden_size, activation=args.activation),
+                   Dense(size=output_size, activation=args.out_activation, reshape=False)
+                 ]
+        valid = (valid_tokens_inp, valid_images)
+        model = RNN(layers=layers, updater=updater, cost=z_cost, 
+                    iterator=SortedPadded(shuffle=False), verbose=1)
+        model.fit(tokens_inp, images, n_epochs=args.iterations, batch_size=args.batch_size, len_filter=None,
+                  snapshot_freq=args.snapshot_freq, path=model_path, valid=valid)
+        # FIXME need validation
         
     elif args.model_type == 'shared_all':
         if args.zero_shot:
@@ -320,7 +333,7 @@ def train(args):
         model.fit(tokens_inp, tokens_out, images, n_epochs=args.iterations, batch_size=args.batch_size,
                   snapshot_freq=args.snapshot_freq, path=model_path, valid=valid)
 
-    cPickle.dump(model, open(model_path,"w"))
+    cPickle.dump(model, gzip.open(model_path,"w"))
 
 
 def test(args):
@@ -341,9 +354,9 @@ def test(args):
     D = Cdist()
     dataset = args.dataset
     suffix = '' if args.iter_predict is None else ".{0}".format(args.iter_predict)
-    model = cPickle.load(open('model.dat' + suffix))
-    tokenizer = cPickle.load(open('tok.pkl'))
-    scaler = cPickle.load(open('scaler.pkl'))
+    model = cPickle.load(gzip.open('model.dat.gz' + suffix))
+    tokenizer = cPickle.load(gzip.open('tok.pkl.gz'))
+    scaler = cPickle.load(gzip.open('scaler.pkl.gz'))
     real_stdout = sys.stdout
     with open('/dev/null', 'w') as f:
         sys.stdout = f
@@ -412,30 +425,30 @@ def test(args):
                         'input':tokenizer.inverse_transform([inputs[j]])[0] }
             testInfo['items'].append(itemInfo)
         print args.iter_predict, errors, N, errors/N
-    testInfoPath = 'testInfo-task={0}-scramble={1}-iter_predict={2}.json'.format(testInfo['task'], testInfo['scramble'], testInfo['iter_predict'])
-    json.dump(testInfo, open(testInfoPath,'w'))
+    testInfoPath = 'testInfo-task={0}-scramble={1}-iter_predict={2}.json.gz'.format(testInfo['task'], testInfo['scramble'], testInfo['iter_predict'])
+    json.dump(testInfo, gzip.open(testInfoPath,'w'))
 
 def project_words(args):
     suffix = '' if args.iter_predict is None else ".{0}".format(args.iter_predict)
-    model = cPickle.load(open('model.dat' + suffix))
-    tokenizer = cPickle.load(open('tok.pkl'))
-    scaler = cPickle.load(open('scaler.pkl'))
+    model = cPickle.load(gzip.open('model.dat.gz' + suffix))
+    tokenizer = cPickle.load(gzip.open('tok.pkl.gz'))
+    scaler = cPickle.load(gzip.open('scaler.pkl.gz'))
     exclude = ['PAD','END','UNK']
     words, indexes = zip(*[ (w,i) for (w,i) in tokenizer.encoder.iteritems() if w not in exclude ])
     inputs = [ [tokenizer.encoder['PAD'], i, tokenizer.encoder['END']] for i in indexes ]
     preds  = scaler.inverse_transform(model.predict(inputs))
     proj = dict((words[i], preds[i]) for i in range(0, len(words)))
-    cPickle.dump(proj, open("proj.pkl" + suffix, "w"))
+    cPickle.dump(proj, gzip.open("proj.pkl.gz" + suffix, "w"))
     
 def extract_embeddings(args):
-    tokenizer = cPickle.load(open('tok.pkl'))
+    tokenizer = cPickle.load(gzip.open('tok.pkl.gz'))
     #scaler = cPickle.load(open('scaler.pkl'))
     suffix = '' if args.iter_predict is None else ".{0}".format(args.iter_predict)
-    model = cPickle.load(open('model.dat' + suffix))
+    model = cPickle.load(gzip.open('model.dat.gz' + suffix))
     embeddings = model.layers[0].params[0].get_value()
     table = dict((word, embeddings[i]) for i,word in tokenizer.decoder.iteritems() 
                  if word not in ['END','PAD','UNK'] )
-    cPickle.dump(table, open('embeddings.pkl' + suffix, 'w'))
+    cPickle.dump(table, gzip.open('embeddings.pkl.gz' + suffix, 'w'))
 
 class Cdist():
     def __init__(self):

@@ -15,6 +15,7 @@ from passage.theano_utils import floatX, intX, shared0s
 import passage.activations as activations
 import passage.inits as inits
 import cPickle
+import gzip
 
 def one_hot(X, n):
     X = np.asarray(X)
@@ -180,7 +181,7 @@ class ForkedRNN(object):
             elif self.verbose == 1:
                 print status ; sys.stdout.flush()
             if path and e % snapshot_freq == 0:
-                cPickle.dump(self, open("{0}.{1}".format(path, e),"w"))
+                cPickle.dump(self, gzip.open("{0}.{1}".format(path, e),"w"))
             if valid:
                 vaX, vaY, vaZ = valid
                 costs_valid = [ self._cost_valid(x, y, z) for x,y,z 
@@ -378,7 +379,7 @@ class RNN(object):
             elif self.verbose == 1:
                 print status ; sys.stdout.flush()
             if path and e % snapshot_freq == 0:
-                cPickle.dump(self, open("{0}.{1}".format(path, e),"w"))
+                cPickle.dump(self, gzip.open("{0}.{1}".format(path, e),"w"))
             if valid:
                 vaX, vaY = valid
                 costs_valid = [ self._cost_valid(x, y) for x,y 
