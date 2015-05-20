@@ -113,14 +113,6 @@ def main():
     else:
         train(args)
 
-class NoScaler():
-    def __init__(self):
-        pass
-    def fit_transform(self, x):
-        return x
-    def transform(self, x):
-        return x
-
 def train_linear(args):
     p = dp.getDataProvider(args.dataset)
     data = list(p.iterImageSentencePair(split='train'))
@@ -212,7 +204,7 @@ def train(args):
                                for pair in pairs ])
     scaler = StandardScaler() if args.scaler == 'standard' else NoScaler()
     images = scaler.fit_transform(images)
-    tokens = [ [tokenizer.encoder['PAD']] + sent + [tokenizer.encoder['END'] ]
+    tokens = [ [tokenizer.encoder['PAD']] + sent + [tokenizer.encoder['END'] ] 
                for sent in tokenizer.fit_transform(sentences) ]
     tokens_inp = [ token[:-1] for token in tokens ]
 
@@ -427,7 +419,7 @@ def test(args):
         print args.iter_predict, errors, N, errors/N
     testInfoPath = 'testInfo-task={0}-scramble={1}-iter_predict={2}.json.gz'.format(testInfo['task'], testInfo['scramble'], testInfo['iter_predict'])
     json.dump(testInfo, gzip.open(testInfoPath,'w'))
-
+    
 def project_words(args):
     suffix = '' if args.iter_predict is None else ".{0}".format(args.iter_predict)
     model = cPickle.load(gzip.open('model.dat.gz' + suffix))
@@ -435,7 +427,7 @@ def project_words(args):
     scaler = cPickle.load(gzip.open('scaler.pkl.gz'))
     exclude = ['PAD','END','UNK']
     words, indexes = zip(*[ (w,i) for (w,i) in tokenizer.encoder.iteritems() if w not in exclude ])
-    inputs = [ [tokenizer.encoder['PAD'], i, tokenizer.encoder['END']] for i in indexes ]
+    inputs = [ [tokenizer.encoder['PAD'], i, tokenizer.encoder['END']] for i in indexes ] # FIXME actually for training we don't have END
     preds  = scaler.inverse_transform(model.predict(inputs))
     proj = dict((words[i], preds[i]) for i in range(0, len(words)))
     cPickle.dump(proj, gzip.open("proj.pkl.gz" + suffix, "w"))
