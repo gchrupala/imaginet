@@ -19,3 +19,4 @@ def serialize(model):
     model.settings['layers'] = layer_configs
     return  {'model_name': model.__class__.__name__, 'model_module': model.__class__.__module__, 'config': model.settings}
 
+
