@@ -14,8 +14,42 @@ from passage.utils import shuffle, iter_data
 from passage.theano_utils import floatX, intX, shared0s
 import passage.activations as activations
 import passage.inits as inits
+import passage.layers
 import cPickle
 import gzip
+import utils
+
+class Workflow(object):
+    '''Workflow groups together the models needed to project sentence to vectors.'''
+
+    def __init__(self, tokenizer, projector, scaler):
+        self.tokenizer = tokenizer
+        self.projector = projector 
+        self.scaler = scaler
+    
+    def project(self, sentences):
+        '''Project sentences to vectors.'''
+        inputs    = self.tokenizer.transform(sentences)
+        preds     = self.scaler.inverse_transform(self.projector.predict(inputs))
+        return preds        
+
+def load_workflow(path):
+    '''Load workflow from directory path.'''
+    tokenizer = cPickle.load(gzip.open(path + "/tok.pkl.gz"))
+    scaler    = cPickle.load(gzip.open(path + "/scaler.pkl.gz"))
+    projector     = utils.deserialize(cPickle.load(gzip.open(path + "/model.univ.pkl.gz")))
+    return Workflow(tokenizer, projector, scaler)
+
+
+class NoScaler():
+    def __init__(self):
+        pass
+    def fit_transform(self, x):
+        return x
+    def transform(self, x):
+        return x
+    def inverse_transform(self, x):
+        return x
 
 def one_hot(X, n):
     X = np.asarray(X)
