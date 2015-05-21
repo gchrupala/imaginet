@@ -204,6 +204,44 @@ class EncoderDecoder(object):
         self._train = theano.function([self.X, self.Y_prev, self.Y_int ], self.cost, updates=self.updates)
         self._predict = theano.function([self.X, self.Y_prev], self.y_te)
 
+class EncoderDecoder2(object):
+    def __init__(self, embedding_size=128, size=128, vocab_size=128):
+        self.embedding_size = embedding_size 
+        self.size = size
+        self.vocab_size = vocab_size
+        
+        self.OH_inp = OneHot(n_features=self.vocab_size)
+        self.OH_out = OneHot(n_features=self.vocab_size)
+        # embedding
+        self.E = Dense(size=self.embedding_size, activation='linear')
+        self.E_inp = Wrapped(layer=self.E)
+        self.E_out = Wrapped(layer=self.E)
+
+        self.H0 = Zeros(size=self.size)
+        self.H_enc = GatedRecurrentWithH0(seq_output=False, size=self.size)
+        self.H_dec = GatedRecurrentWithH0(seq_output=True,  size=self.size)        
+        # something to map hidden to embedding?
+        ## FIXME TODO
+        #self.O = Dense(size=self.vocab_size, activation='softmax', reshape=True)
+        self.O = TransposedDense(layer=E)
+        self.H_enc.connect(self.H0, self.E_inp)
+        self.H_dec.connect(self.H_enc, self.E_out)
+        self.O.connect(self.H_dec)
+        
+        self.params = flatten([l.params for l in [self.E, self.E_inp, self.E_out, self.H0, self.H_enc, self.H_dec, self.O, self.W]]) 
+        self.X = self.E_inp.input
+        self.Y_prev = self.E_out.input
+        self.Y_int = self.W.input
+
+        self.Y = self.W.output()
+
+        self.y_tr = self.O.output(dropout_active=True)
+        self.y_te = self.O.output(dropout_active=False)
+        self.cost = CategoricalCrossEntropySwapped(self.Y, self.y_tr)
+        self.updater = Adam()
+        self.updates = self.updater.get_updates(self.params, self.cost)
+        self._train = theano.function([self.X, self.Y_prev, self.Y_int ], self.cost, updates=self.updates)
+        self._predict = theano.function([self.X, self.Y_prev], self.y_te)
 
 def pad(xss, padding):
     max_len = max((len(xs) for xs in xss))
