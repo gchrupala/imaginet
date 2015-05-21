@@ -138,12 +138,12 @@ class GatedRecurrentWithH0(object):
 
 
 
-E = SharedEmbedding(size=128, n_features=tokenizer.n_features)
+E = SharedEmbedding(size=256, n_features=tokenizer.n_features)
 E_inp = EmbeddingOut(embedding=E)
 E_out = EmbeddingOut(embedding=E)
-H0 = Zeros(size=128)
-H_enc = GatedRecurrentWithH0(seq_output=False, size=128)
-H_dec = GatedRecurrentWithH0(seq_output=True,  size=128)
+H0 = Zeros(size=256)
+H_enc = GatedRecurrentWithH0(seq_output=False, size=256)
+H_dec = GatedRecurrentWithH0(seq_output=True,  size=256)
 O = Dense(size=tokenizer.n_features, activation='softmax', reshape=True)
 W = OneHot(n_features=tokenizer.n_features)
 
@@ -163,7 +163,7 @@ Y_int = W.input
 Y = W.output()
 
 y_tr = O.output(dropout_active=True)
-
+y_te = O.output(dropout_active=False)
 cost = CategoricalCrossEntropySwapped(Y, y_tr)
 
 from passage.updates import Adam
@@ -180,7 +180,7 @@ updates = updater.get_updates(params, cost)
 import theano
 
 _train = theano.function([X, Y_prev, Y_int ], cost, updates=updates)
-
+_predict = theano.function([X, Y_prev], y_te)
 
 
 def pad(xss, padding):
@@ -191,8 +191,8 @@ def pad(xss, padding):
 
 
 import numpy
-inputs = numpy.array(pad([ sent for sent in tokens ], tokenizer.encoder['PAD']), dtype='int32')
-outputs = numpy.array(pad([ list(reversed(sent)) for sent in tokens ], tokenizer.encoder['PAD']), dtype='int32')
+inputs = numpy.array(pad([ sent + [tokenizer.encoder['END']] for sent in tokens ], tokenizer.encoder['PAD']), dtype='int32')
+outputs = inputs #numpy.array(pad([ list(reversed(sent)) for sent in tokens ], tokenizer.encoder['PAD']), dtype='int32')
 
 outputs_prev = numpy.array([ [tokenizer.encoder['PAD']] + list(output[:-1]) for output in outputs ], dtype='int32')
 
@@ -202,8 +202,16 @@ print outputs_prev.shape
 
 mb_size = 64
 N = len(inputs)
-for it in range(1,10):
+for it in range(1,5):
     j = 0
     while j < N:
         print it, j, _train(inputs[j:j+mb_size], outputs_prev[j:j+mb_size], outputs[j:j+mb_size])
         j = j + mb_size
+
+for i in range(10):
+    pred = _predict(inputs[i:i+1], outputs_prev[i:i+1])[0]
+    print [ tokenizer.decoder[k] for k in inputs[i] ]
+    print pred.shape, [ tokenizer.decoder[k] for k in numpy.argmax(pred, axis=1) ]
+    print
+
+
