@@ -3,6 +3,9 @@ import sys
 sys.path.append('/home/gchrupala/repos/neuraltalk/imagernn/')
 sys.path.append('/home/gchrupala/repos/Passage/')
 import numpy
+import theano.tensor as T
+import theano
+
 import data_provider as dp
 
 data = dp.getDataProvider('flickr8k')
@@ -11,7 +14,7 @@ pairs = list(data.iterImageSentencePair(split='train'))
 
 from passage.preprocessing import Tokenizer
 
-tokenizer = Tokenizer(min_df=5)
+tokenizer = Tokenizer(min_df=10)
 
 tokens = tokenizer.fit_transform([ pair['sentence']['raw'] for pair in pairs ])
 
@@ -22,6 +25,7 @@ from imaginet import *
 imaginet = reload(imaginet)
 
 from passage.layers import GatedRecurrent, Embedding,  OneHot
+from passage.updates import Adam
 
 class TransposedDense(object):
     
@@ -165,50 +169,40 @@ class GatedRecurrentWithH0(object):
             return out[-1]  
 
 
-
-E = SharedEmbedding(size=512, n_features=tokenizer.n_features)
-E_inp = EmbeddingOut(embedding=E)
-E_out = EmbeddingOut(embedding=E)
-H0 = Zeros(size=512)
-H_enc = GatedRecurrentWithH0(seq_output=False, size=512)
-H_dec = GatedRecurrentWithH0(seq_output=True,  size=512)
-O = Dense(size=tokenizer.n_features, activation='softmax', reshape=True)
-W = OneHot(n_features=tokenizer.n_features)
-
-
-
-H_enc.connect(H0, E_inp)
-H_dec.connect(H_enc, E_out)
-O.connect(H_dec)
-
-X = E_inp.input
-Y_prev = E_out.input
-
-import theano.tensor as T
-
-Y_int = W.input
-
-Y = W.output()
-
-y_tr = O.output(dropout_active=True)
-y_te = O.output(dropout_active=False)
-cost = CategoricalCrossEntropySwapped(Y, y_tr)
-
-from passage.updates import Adam
-
-updater = Adam()
-
 def flatten(l):
     return [item for sublist in l for item in sublist]
 
-params = flatten([l.params for l in [E, E_inp, E_out, H0, H_enc, H_dec, O, W]]) 
+class EncoderDecoder(object):
+    def __init__(self, embedding_size=128, size=128, vocab_size=128):
+        self.embedding_size = embedding_size 
+        self.size = size
+        self.vocab_size = vocab_size
+        self.E = SharedEmbedding(size=self.embedding_size, n_features=self.vocab_size)
+        self.E_inp = EmbeddingOut(embedding=self.E)
+        self.E_out = EmbeddingOut(embedding=self.E)
+        self.H0 = Zeros(size=self.size)
+        self.H_enc = GatedRecurrentWithH0(seq_output=False, size=self.size)
+        self.H_dec = GatedRecurrentWithH0(seq_output=True,  size=self.size)
+        self.O = Dense(size=self.vocab_size, activation='softmax', reshape=True)
+        self.W = OneHot(n_features=self.vocab_size)
 
-updates = updater.get_updates(params, cost)
+        self.H_enc.connect(self.H0, self.E_inp)
+        self.H_dec.connect(self.H_enc, self.E_out)
+        self.O.connect(self.H_dec)
+        self.params = flatten([l.params for l in [self.E, self.E_inp, self.E_out, self.H0, self.H_enc, self.H_dec, self.O, self.W]]) 
+        self.X = self.E_inp.input
+        self.Y_prev = self.E_out.input
+        self.Y_int = self.W.input
 
-import theano
+        self.Y = self.W.output()
 
-_train = theano.function([X, Y_prev, Y_int ], cost, updates=updates)
-_predict = theano.function([X, Y_prev], y_te)
+        self.y_tr = self.O.output(dropout_active=True)
+        self.y_te = self.O.output(dropout_active=False)
+        self.cost = CategoricalCrossEntropySwapped(self.Y, self.y_tr)
+        self.updater = Adam()
+        self.updates = self.updater.get_updates(self.params, self.cost)
+        self._train = theano.function([self.X, self.Y_prev, self.Y_int ], self.cost, updates=self.updates)
+        self._predict = theano.function([self.X, self.Y_prev], self.y_te)
 
 
 def pad(xss, padding):
@@ -228,18 +222,20 @@ print inputs.shape
 print outputs.shape
 print outputs_prev.shape
 
-mb_size = 64
+model = EncoderDecoder(embedding_size=1024, size=1024, vocab_size=tokenizer.n_features)
+
+mb_size = 128
 N = len(inputs)
 for it in range(1,5):
     j = 0
     while j < N:
-        print it, j, _train(inputs[j:j+mb_size], outputs_prev[j:j+mb_size], outputs[j:j+mb_size])
+        print it, j, model._train(inputs[j:j+mb_size], outputs_prev[j:j+mb_size], outputs[j:j+mb_size])
         j = j + mb_size
 
-for i in range(10):
-    pred = _predict(inputs[i:i+1], outputs_prev[i:i+1])[0]
-    print [ tokenizer.decoder[k] for k in inputs[i] ]
-    print pred.shape, [ tokenizer.decoder[k] for k in numpy.argmax(pred, axis=1) ]
-    print
+    for i in range(100):
+        pred = model._predict(inputs[i:i+1], outputs_prev[i:i+1])[0]
+        print ' '.join(( tokenizer.decoder[k] for k in inputs[i] if k != tokenizer.encoder['PAD'] ))
+        print pred.shape, ' '.join(( tokenizer.decoder[k] for k in numpy.argmax(pred, axis=1) if k != tokenizer.encoder['PAD']))
+        print
 
 
