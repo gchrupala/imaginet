@@ -5,9 +5,9 @@ from theano.ifelse import ifelse
 from theano.tensor.extra_ops import repeat
 import numpy as np
 from time import time
-import passage.costs
-import passage.updates
-import passage.iterators 
+import passage.costs as costs
+import passage.updates as updates
+import passage.iterators as iterators
 from passage.utils import case_insensitive_import, save
 from passage.preprocessing import LenFilter, standardize_targets
 from passage.utils import shuffle, iter_data
