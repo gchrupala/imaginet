@@ -7,7 +7,7 @@ import data_provider as dp
 
 data = dp.getDataProvider('flickr8k')
 
-pairs = list(data.iterImageSentencePair(split='val'))#[0:1000]
+pairs = list(data.iterImageSentencePair(split='train'))
 
 from passage.preprocessing import Tokenizer
 
@@ -23,6 +23,34 @@ imaginet = reload(imaginet)
 
 from passage.layers import GatedRecurrent, Embedding,  OneHot
 
+class TransposedDense(object):
+    
+    def __init__(self, layer, reshape=False):
+        self.settings = locals()
+        del self.settings['self']
+        self.layer = layer
+        self.reshape = reshape
+        self.params = []
+        self.n_in = self.layer.size
+        self.size = self.layer.n_in
+        
+    def connect(self, l_in):
+        self.l_in = l_in
+
+    def output(self, dropout_active=False):
+        X = self.l_in.output(dropout_active=dropout_active)
+        if self.p_drop > 0. and dropout_active:
+            X = dropout(X, self.p_drop)
+        if self.reshape: #reshape for tensor3 softmax
+            shape = X.shape
+            X = X.reshape((shape[0]*shape[1], self.n_in))
+
+        out =  self.layer.activation(T.dot(X, self.layer.w.T) + self.layer.b)
+
+        if self.reshape: #reshape for tensor3 softmax
+            out = out.reshape((shape[0], shape[1], self.size))
+
+        return out
 
 class Zeros(object):
     
@@ -138,12 +166,12 @@ class GatedRecurrentWithH0(object):
 
 
 
-E = SharedEmbedding(size=256, n_features=tokenizer.n_features)
+E = SharedEmbedding(size=512, n_features=tokenizer.n_features)
 E_inp = EmbeddingOut(embedding=E)
 E_out = EmbeddingOut(embedding=E)
-H0 = Zeros(size=256)
-H_enc = GatedRecurrentWithH0(seq_output=False, size=256)
-H_dec = GatedRecurrentWithH0(seq_output=True,  size=256)
+H0 = Zeros(size=512)
+H_enc = GatedRecurrentWithH0(seq_output=False, size=512)
+H_dec = GatedRecurrentWithH0(seq_output=True,  size=512)
 O = Dense(size=tokenizer.n_features, activation='softmax', reshape=True)
 W = OneHot(n_features=tokenizer.n_features)
 
