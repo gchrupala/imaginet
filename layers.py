@@ -19,7 +19,7 @@ class Add(object):
         return h_tm1 + x_t
 
 class Mult(object):
-    '''Elementwise addition.'''
+    '''Elementwise multiplication.'''
     def __init__(self, size):
         self.size = size
         self.id = T.alloc(1.0, 1, self.size)
