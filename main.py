@@ -228,7 +228,8 @@ def train(args):
         z_cost = MeanSquaredError
     elif args.cost == 'CosineDistance':
         z_cost = CosineDistance
-
+    else:
+        raise ValueError("Unknown cost")
     if args.hidden_type == 'gru':
         Recurrent = GatedRecurrent
     elif args.hidden_type == 'lstm':
