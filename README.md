@@ -9,7 +9,7 @@ the visual features of the corresponding images.
 Installation
 ============
 
-Currently, installation is a manual. The main prerequisite is
+Currently, installation is manual. The main prerequisite is
 theano. Additionally, you will also need
 https://github.com/gchrupala/Passage. If you want to train new models
 on the Flickr30k or MSCOCO datasets, you'll also need
