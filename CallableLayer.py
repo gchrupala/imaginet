@@ -85,7 +85,7 @@ class Dense(Layer):
         self.params = [self.w, self.b]
 
     def __call__(self, inp):
-        return softmax3d(T.dot(inp, self.w) + self.b)
+        return T.dot(inp, self.w) + self.b
 
 class GatedRecurrentWithH0(object):
 
@@ -184,7 +184,7 @@ class EncoderDecoder(object):
         #self.params = sum([ l.params for l in [EMB, ENC, DEC, H0, OUT, OH] ], [])
         self.params = sum([ l.params for l in [EMB, H0, ENC, DEC, OUT, OH] ], [])
         self.MODEL = \
-            lambda inp, out_prev: OUT(DEC(EMB(out_prev), last(ENC(EMB(inp), H0(), repeat_h0=1))))
+            lambda inp, out_prev: softmax3d(OUT(DEC(EMB(out_prev), last(ENC(EMB(inp), H0(), repeat_h0=1)))))
         self.input       = T.imatrix()
         self.output_prev = T.imatrix()
         self.output      = T.imatrix('output')
@@ -217,7 +217,7 @@ def main():
     print outputs.shape
     print outputs_prev.shape
 
-    model = EncoderDecoder(embedding_size=128, size=128, vocab_size=tokenizer.n_features)
+    model = EncoderDecoder(embedding_size=512, size=512, vocab_size=tokenizer.n_features)
     mb_size = 128
     N = len(inputs)
     for it in range(1,5):
