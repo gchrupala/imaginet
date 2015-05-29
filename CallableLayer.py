@@ -1,15 +1,18 @@
-# Mock interface for a composable layer
 import numpy as np
 import theano
 import theano.tensor as T
+
 # Utils
 
 def shared0s(shape, dtype=theano.config.floatX, name=None):
     return sharedX(np.zeros(shape), dtype=dtype, name=name)
+
 def sharedX(X, dtype=theano.config.floatX, name=None):
     return theano.shared(np.asarray(X, dtype=dtype), name=name)
+
 def uniform(shape, scale=0.05):
     return sharedX(np.random.uniform(low=-scale, high=scale, size=shape))
+
 def orthogonal(shape, scale=1.1):
     """ benanne lasagne ortho init (faster than qr approach)"""
     flat_shape = (shape[0], np.prod(shape[1:]))
@@ -18,12 +21,15 @@ def orthogonal(shape, scale=1.1):
     q = u if u.shape == flat_shape else v # pick the one with the correct shape
     q = q.reshape(shape)
     return sharedX(scale * q[:shape[0], :shape[1]])
+
 def tanh(x):
 	return T.tanh(x)
+
 def steeper_sigmoid(x):
 	return 1./(1. + T.exp(-3.75 * x))
-def softmax3d(inp):
-    x = inp.reshape((inp.shape[0], inp.shape[1]*inp.shape[2]))
+
+def softmax3d(inp): 
+    x = inp.reshape((inp.shape[0]*inp.shape[1],inp.shape[2]))
     e_x = T.exp(x - x.max(axis=1).dimshuffle(0, 'x'))
     result = e_x / e_x.sum(axis=1).dimshuffle(0, 'x')
     return result.reshape(inp.shape)
@@ -74,12 +80,12 @@ class Dense(Layer):
     def __init__(self, size_in, size_out):
         self.size_in = size_in
         self.size_out = size_out
-        self.w = uniform((self.size_in, self.size_out))
+        self.w = orthogonal((self.size_in, self.size_out))
         self.b = shared0s((self.size_out))
         self.params = [self.w, self.b]
 
     def __call__(self, inp):
-        return T.dot(inp, self.w) + self.b
+        return softmax3d(T.dot(inp, self.w) + self.b)
 
 class GatedRecurrentWithH0(object):
 
@@ -175,7 +181,8 @@ class EncoderDecoder(object):
         H0  = Zeros(size=self.size)
         OUT = Dense(size_in=self.size, size_out=self.vocab_size) 
         OH  = OneHot(size_in=self.vocab_size)
-        self.params = sum([ l.params for l in [EMB, ENC, DEC, H0, OUT, OH] ], [])
+        #self.params = sum([ l.params for l in [EMB, ENC, DEC, H0, OUT, OH] ], [])
+        self.params = sum([ l.params for l in [EMB, H0, ENC, DEC, OUT, OH] ], [])
         self.MODEL = \
             lambda inp, out_prev: OUT(DEC(EMB(out_prev), last(ENC(EMB(inp), H0(), repeat_h0=1))))
         self.input       = T.imatrix()
@@ -185,7 +192,7 @@ class EncoderDecoder(object):
         self.y_tr = self.MODEL(self.input, self.output_prev)
         self.y_te = self.MODEL(self.input, self.output_prev)
         # FIXME need flattening?
-        self.cost = CategoricalCrossEntropySwapped(self.oh_output, softmax3d(self.y_tr))
+        self.cost = CategoricalCrossEntropySwapped(self.oh_output, self.y_tr)
         #self.cost = MeanSquaredError(self.oh_output, self.y_tr)
         self.updater = Adam()
         self.updates = self.updater.get_updates(self.params, self.cost)
