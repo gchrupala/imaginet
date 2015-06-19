@@ -2,8 +2,11 @@
 
 Imaginet implements several models which read sentences describing
 images and learn to build representations of these images grounded in
-the visual features of the corresponding images.
+the visual features of the corresponding images. These models were 
+introduced in [Chrupała et al 2015](http://arxiv.org/abs/1506.03694).
 
+This repository contains the original implementation. New developments are 
+taking place in [Reimaginet](https://github.com/gchrupala/reimaginet)
 
 
 Installation
